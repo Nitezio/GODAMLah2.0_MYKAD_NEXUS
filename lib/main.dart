@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // For HapticFeedback
 import 'dart:async';
+import 'package:mobile_scanner/mobile_scanner.dart'; // Import the scanner package
 
 void main() {
   runApp(const MyKadNexusApp());
@@ -62,7 +64,10 @@ class _LockScreenState extends State<LockScreen> {
             const SizedBox(height: 20),
             const Text(
               "MyKad Nexus",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
             ),
             const SizedBox(height: 10),
             const Text(
@@ -80,7 +85,8 @@ class _LockScreenState extends State<LockScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF06B6D4),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
                 ),
               ),
           ],
@@ -143,10 +149,15 @@ class DashboardScreen extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
-                      Text("ALI BIN AHMAD", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text("880505-10-5555", style: TextStyle(color: Colors.grey)),
+                      Text("ALI BIN AHMAD",
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text("880505-10-5555",
+                          style: TextStyle(color: Colors.grey)),
                       SizedBox(height: 5),
-                      Text("● Active & Secured", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+                      Text("● Active & Secured",
+                          style: TextStyle(
+                              color: Colors.greenAccent, fontSize: 12)),
                     ],
                   )
                 ],
@@ -160,10 +171,11 @@ class DashboardScreen extends StatelessWidget {
             Center(
               child: GestureDetector(
                 onTap: () {
-                  // Go to Fake Scanner -> Then Consent Screen
+                  // Go to Real Scanner -> Then Consent Screen
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ScannerSimulationScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const ScannerSimulationScreen()),
                   );
                 },
                 child: Container(
@@ -171,16 +183,21 @@ class DashboardScreen extends StatelessWidget {
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: const Color(0xFF0F172A),
-                    border: Border.all(color: const Color(0xFF06B6D4), width: 2),
+                    border:
+                    Border.all(color: const Color(0xFF06B6D4), width: 2),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: const [
-                      Icon(Icons.qr_code_scanner, size: 60, color: Color(0xFF06B6D4)),
+                      Icon(Icons.qr_code_scanner,
+                          size: 60, color: Color(0xFF06B6D4)),
                       SizedBox(height: 15),
-                      Text("Scan Clinic QR", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      Text("Connect to Service Provider", style: TextStyle(color: Colors.grey)),
+                      Text("Scan Clinic QR",
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text("Connect to Service Provider",
+                          style: TextStyle(color: Colors.grey)),
                     ],
                   ),
                 ),
@@ -194,11 +211,14 @@ class DashboardScreen extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const RecoveryScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const RecoveryScreen()),
                   );
                 },
-                icon: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
-                label: const Text("I Lost My Card (Recovery)", style: TextStyle(color: Colors.redAccent)),
+                icon: const Icon(Icons.warning_amber_rounded,
+                    color: Colors.redAccent),
+                label: const Text("I Lost My Card (Recovery)",
+                    style: TextStyle(color: Colors.redAccent)),
               ),
             ),
             const SizedBox(height: 20),
@@ -210,36 +230,175 @@ class DashboardScreen extends StatelessWidget {
 }
 
 // ==========================================
-// NEW SCREEN: FAKE SCANNER ANIMATION
+// SCREEN 3: REAL SCANNER (Mobile Scanner)
 // ==========================================
 class ScannerSimulationScreen extends StatefulWidget {
   const ScannerSimulationScreen({super.key});
 
   @override
-  State<ScannerSimulationScreen> createState() => _ScannerSimulationScreenState();
+  State<ScannerSimulationScreen> createState() =>
+      _ScannerSimulationScreenState();
 }
 
-class _ScannerSimulationScreenState extends State<ScannerSimulationScreen> with SingleTickerProviderStateMixin {
+class _ScannerSimulationScreenState extends State<ScannerSimulationScreen> {
+  bool _isScanned = false;
+  final MobileScannerController _cameraController = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    returnImage: false,
+  );
+
+  @override
+  void dispose() {
+    _cameraController.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_isScanned) return;
+
+    final List<Barcode> barcodes = capture.barcodes;
+    if (barcodes.isNotEmpty) {
+      setState(() {
+        _isScanned = true;
+      });
+
+      // 1. Physical Feedback
+      HapticFeedback.mediumImpact();
+
+      // 2. Stop camera to freeze frame
+      _cameraController.stop();
+
+      // 3. Navigate after short delay
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const ConsentScreen()),
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // 1. REAL CAMERA FEED
+          MobileScanner(
+            controller: _cameraController,
+            onDetect: _onDetect,
+          ),
+
+          // 2. DARKENED OVERLAY (To focus on center)
+          ColorFiltered(
+            colorFilter: ColorFilter.mode(
+                Colors.black.withOpacity(0.5), BlendMode.srcOut),
+            child: Stack(
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.transparent,
+                    backgroundBlendMode: BlendMode.dstOut,
+                  ),
+                ),
+                Center(
+                  child: Container(
+                    height: 260,
+                    width: 260,
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 3. CYAN BORDER & LASER ANIMATION
+          Center(
+            child: Container(
+              height: 250,
+              width: 250,
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFF06B6D4), width: 3),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: _isScanned
+                  ? const Center(
+                  child: Icon(Icons.check_circle,
+                      color: Color(0xFF06B6D4), size: 60))
+                  : const ScannerLineAnimation(),
+            ),
+          ),
+
+          // 4. INSTRUCTIONS
+          Positioned(
+            bottom: 100,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                Text(
+                  _isScanned ? "PROVIDER VERIFIED" : "Scan Clinic QR",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _isScanned ? const Color(0xFF06B6D4) : Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                if (!_isScanned)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8.0),
+                    child: Text("Align code within the frame",
+                        style: TextStyle(color: Colors.white70)),
+                  ),
+              ],
+            ),
+          ),
+
+          // 5. BACK BUTTON
+          Positioned(
+            top: 50,
+            left: 20,
+            child: CircleAvatar(
+              backgroundColor: Colors.black54,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+// HELPER: Laser Animation for the Scanner
+class ScannerLineAnimation extends StatefulWidget {
+  const ScannerLineAnimation({super.key});
+
+  @override
+  State<ScannerLineAnimation> createState() => _ScannerLineAnimationState();
+}
+
+class _ScannerLineAnimationState extends State<ScannerLineAnimation>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    // 1. Setup Scanning Animation Loop
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
-
-    // 2. Auto-Navigate after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const ConsentScreen()),
-        );
-      }
-    });
   }
 
   @override
@@ -250,85 +409,30 @@ class _ScannerSimulationScreenState extends State<ScannerSimulationScreen> with 
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Background Camera Placeholder
-          Container(
-            color: Colors.black54,
-            child: const Center(
-              child: Icon(Icons.qr_code, size: 200, color: Colors.white10),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Align(
+          alignment: Alignment(0, _controller.value * 2 - 1),
+          child: Container(
+            height: 2,
+            width: 240,
+            decoration: const BoxDecoration(
+              color: Color(0xFF06B6D4), // Cyan Laser
+              boxShadow: [
+                BoxShadow(
+                    color: Color(0xFF06B6D4), blurRadius: 10, spreadRadius: 1)
+              ],
             ),
           ),
-
-          // Viewfinder Box
-          Center(
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white, width: 2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-
-          // Animated Scanning Line (The Laser)
-          Center(
-            child: SizedBox(
-              width: 250,
-              height: 250,
-              child: AnimatedBuilder(
-                animation: _controller,
-                builder: (context, child) {
-                  return Align(
-                    alignment: Alignment(0, _controller.value * 2 - 1),
-                    child: Container(
-                      height: 2,
-                      width: 240,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF06B6D4), // Cyan Laser
-                        boxShadow: [
-                          BoxShadow(color: Color(0xFF06B6D4), blurRadius: 10, spreadRadius: 1)
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-
-          // Instruction Text
-          const Positioned(
-            bottom: 100,
-            left: 0,
-            right: 0,
-            child: Text(
-              "Align QR Code within frame",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-
-          // Close Button
-          Positioned(
-            top: 50,
-            left: 20,
-            child: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
-          )
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
 // ==========================================
-// SCREEN 3: CONSENT POPUP
+// SCREEN 4: CONSENT POPUP
 // ==========================================
 class ConsentScreen extends StatefulWidget {
   const ConsentScreen({super.key});
@@ -366,8 +470,10 @@ class _ConsentScreenState extends State<ConsentScreen> {
             children: const [
               Icon(Icons.check_circle, color: Colors.greenAccent, size: 80),
               SizedBox(height: 20),
-              Text("Data Transferred", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              Text("Session will close automatically.", style: TextStyle(color: Colors.grey)),
+              Text("Data Transferred",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text("Session will close automatically.",
+                  style: TextStyle(color: Colors.grey)),
             ],
           ),
         ),
@@ -396,35 +502,46 @@ class _ConsentScreenState extends State<ConsentScreen> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(10),
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                        child: const Icon(Icons.local_hospital, color: Colors.blue, size: 24),
+                        decoration: const BoxDecoration(
+                            color: Colors.white, shape: BoxShape.circle),
+                        child: const Icon(Icons.local_hospital,
+                            color: Colors.blue, size: 24),
                       ),
                       const SizedBox(width: 15),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
-                          Text("Pantai Hospital", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                          Text("Requesting One-Time Access", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                          Text("Pantai Hospital",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18)),
+                          Text("Requesting One-Time Access",
+                              style: TextStyle(
+                                  color: Colors.grey, fontSize: 12)),
                         ],
                       )
                     ],
                   ),
                   const Divider(color: Colors.white10, height: 30),
 
-                  _buildDataRow("Identity Data", "Source: JPN Node", Icons.badge),
+                  _buildDataRow(
+                      "Identity Data", "Source: JPN Node", Icons.badge),
                   const SizedBox(height: 15),
-                  _buildDataRow("Blood Type & Allergies", "Source: MoH Node", Icons.bloodtype),
+                  _buildDataRow("Blood Type & Allergies", "Source: MoH Node",
+                      Icons.bloodtype),
 
                   const SizedBox(height: 30),
                   _isTransferring
-                      ? const Center(child: CircularProgressIndicator(color: Color(0xFF06B6D4)))
+                      ? const Center(
+                      child: CircularProgressIndicator(
+                          color: Color(0xFF06B6D4)))
                       : Row(
                     children: [
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => Navigator.pop(context),
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            padding:
+                            const EdgeInsets.symmetric(vertical: 15),
                             foregroundColor: Colors.white,
                           ),
                           child: const Text("DENY"),
@@ -437,7 +554,8 @@ class _ConsentScreenState extends State<ConsentScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF06B6D4),
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            padding:
+                            const EdgeInsets.symmetric(vertical: 15),
                           ),
                           child: const Text("ALLOW"),
                         ),
@@ -445,10 +563,10 @@ class _ConsentScreenState extends State<ConsentScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  const Text("Data is encrypted and never stored on this device.",
+                  const Text(
+                      "Data is encrypted and never stored on this device.",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 10)
-                  ),
+                      style: TextStyle(color: Colors.grey, fontSize: 10)),
                 ],
               ),
             ),
@@ -469,7 +587,8 @@ class _ConsentScreenState extends State<ConsentScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text(source, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+              Text(source,
+                  style: const TextStyle(color: Colors.grey, fontSize: 10)),
             ],
           ),
         ),
@@ -480,7 +599,7 @@ class _ConsentScreenState extends State<ConsentScreen> {
 }
 
 // ==========================================
-// SCREEN 4: AUDIT LOG (History)
+// SCREEN 5: AUDIT LOG (History)
 // ==========================================
 class AuditLogScreen extends StatelessWidget {
   const AuditLogScreen({super.key});
@@ -495,9 +614,12 @@ class AuditLogScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _buildLogItem("Pantai Hospital", "Name, Blood Type", "Just Now", Colors.green),
-          _buildLogItem("Maybank", "Identity Verification", "Yesterday", Colors.amber),
-          _buildLogItem("JPJ Roadblock", "License Check", "12 Dec 2024", Colors.blue),
+          _buildLogItem(
+              "Pantai Hospital", "Name, Blood Type", "Just Now", Colors.green),
+          _buildLogItem(
+              "Maybank", "Identity Verification", "Yesterday", Colors.amber),
+          _buildLogItem(
+              "JPJ Roadblock", "License Check", "12 Dec 2024", Colors.blue),
         ],
       ),
     );
@@ -509,16 +631,19 @@ class AuditLogScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 15),
       child: ListTile(
         leading: Icon(Icons.security, color: color),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(title,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold)),
         subtitle: Text(details, style: const TextStyle(color: Colors.grey)),
-        trailing: Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        trailing: Text(time,
+            style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ),
     );
   }
 }
 
 // ==========================================
-// SCREEN 5: RECOVERY (Shard Animation)
+// SCREEN 6: RECOVERY (Shard Animation)
 // ==========================================
 class RecoveryScreen extends StatefulWidget {
   const RecoveryScreen({super.key});
@@ -548,20 +673,22 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Social Recovery"), backgroundColor: Colors.transparent),
+      appBar: AppBar(
+          title: const Text("Social Recovery"),
+          backgroundColor: Colors.transparent),
       body: Padding(
         padding: const EdgeInsets.all(25.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Restoring Identity...", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const Text("Contacting trusted guardians to rebuild private key.", style: TextStyle(color: Colors.grey)),
+            const Text("Restoring Identity...",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const Text("Contacting trusted guardians to rebuild private key.",
+                style: TextStyle(color: Colors.grey)),
             const SizedBox(height: 30),
-
             _buildShardStep("Bank Guardian (Maybank)", _step >= 1),
             _buildShardStep("Family Guardian (Wife)", _step >= 2),
             _buildShardStep("Government Node (JPN)", _step >= 3),
-
             const Spacer(),
             if (_step == 3)
               Container(
@@ -575,11 +702,13 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                 child: const Text(
                   "SUCCESS: Identity Restored on new device.",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.green, fontWeight: FontWeight.bold),
                 ),
               )
             else
-              const Center(child: CircularProgressIndicator(color: Color(0xFF06B6D4))),
+              const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF06B6D4))),
             const SizedBox(height: 20),
           ],
         ),
@@ -603,13 +732,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             color: isDone ? Colors.green : Colors.grey,
           ),
           const SizedBox(width: 15),
-          Text(title, style: TextStyle(
-              color: isDone ? Colors.white : Colors.grey,
-              fontWeight: isDone ? FontWeight.bold : FontWeight.normal
-          )),
+          Text(title,
+              style: TextStyle(
+                  color: isDone ? Colors.white : Colors.grey,
+                  fontWeight: isDone ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
     );
-
   }
 }
