@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'federated_service.dart'; // This connects to the backend simulation file
 
 void main() {
   runApp(const MyKadNexusApp());
@@ -26,7 +25,9 @@ class MyKadNexusApp extends StatelessWidget {
   }
 }
 
-// --- SCREEN 1: LOCK SCREEN (NFC TAP) ---
+// ==========================================
+// SCREEN 1: LOCK SCREEN (Entry Point)
+// ==========================================
 class LockScreen extends StatefulWidget {
   const LockScreen({super.key});
 
@@ -39,8 +40,8 @@ class _LockScreenState extends State<LockScreen> {
 
   void _simulateNFCTap() {
     setState(() => _isScanning = true);
-    // Simulate processing delay
-    Future.delayed(const Duration(seconds: 2), () {
+    // Simulate processing delay (1.5 seconds)
+    Future.delayed(const Duration(milliseconds: 1500), () {
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -69,7 +70,6 @@ class _LockScreenState extends State<LockScreen> {
               style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 50),
-            // Ripple Animation Simulation
             if (_isScanning)
               const CircularProgressIndicator(color: Color(0xFF06B6D4))
             else
@@ -90,7 +90,9 @@ class _LockScreenState extends State<LockScreen> {
   }
 }
 
-// --- SCREEN 2: DASHBOARD & SCANNER ---
+// ==========================================
+// SCREEN 2: DASHBOARD (Main Hub)
+// ==========================================
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
@@ -102,9 +104,15 @@ class DashboardScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          // HISTORY BUTTON - Now Functional!
           IconButton(
             icon: const Icon(Icons.history),
-            onPressed: () {}, // Navigate to Audit Log
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AuditLogScreen()),
+              );
+            },
           ),
         ],
       ),
@@ -113,7 +121,7 @@ class DashboardScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // User Card
+            // User Profile Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -149,7 +157,7 @@ class DashboardScreen extends StatelessWidget {
             const Text("Quick Actions", style: TextStyle(color: Colors.grey)),
             const SizedBox(height: 10),
 
-            // The Scanner Button
+            // Scanner Button
             Center(
               child: GestureDetector(
                 onTap: () {
@@ -179,14 +187,21 @@ class DashboardScreen extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            // Recovery Button
+
+            // RECOVERY BUTTON - Now Functional!
             Center(
               child: TextButton.icon(
-                onPressed: (){},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const RecoveryScreen()),
+                  );
+                },
                 icon: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
                 label: const Text("I Lost My Card (Recovery)", style: TextStyle(color: Colors.redAccent)),
               ),
-            )
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -194,7 +209,9 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
-// --- SCREEN 3: GRANULAR CONSENT (THE HERO) ---
+// ==========================================
+// SCREEN 3: GRANULAR CONSENT (The Interaction)
+// ==========================================
 class ConsentScreen extends StatefulWidget {
   const ConsentScreen({super.key});
 
@@ -206,32 +223,18 @@ class _ConsentScreenState extends State<ConsentScreen> {
   bool _isTransferring = false;
   bool _completed = false;
 
-  void _approveAccess() async {
+  void _approveAccess() {
     setState(() => _isTransferring = true);
-
-    // --- INTEGRATED BACKEND SIMULATION ---
-    final service = FederatedNodeService();
-
-    print("Connecting to JPN Node...");
-    await service.fetchJPNData("880505-10-5555");
-
-    print("Connecting to MoH Node...");
-    await service.fetchMoHData("880505-10-5555");
-    // ------------------------------------------
-
-    setState(() {
-      _isTransferring = false;
-      _completed = true;
-    });
-
-    // The Security Feature: Wiping RAM
-    service.wipeSessionData();
-
-    // Auto close after success
+    // Simulate API Call to JPN/MoH Nodes
     Future.delayed(const Duration(seconds: 2), () {
-      if(mounted) {
+      setState(() {
+        _isTransferring = false;
+        _completed = true;
+      });
+      // Auto close after success
+      Future.delayed(const Duration(seconds: 2), () {
         Navigator.pop(context);
-      }
+      });
     });
   }
 
@@ -290,10 +293,8 @@ class _ConsentScreenState extends State<ConsentScreen> {
                   ),
                   const Divider(color: Colors.white10, height: 30),
 
-                  // Data Point 1
                   _buildDataRow("Identity Data", "Source: JPN Node", Icons.badge),
                   const SizedBox(height: 15),
-                  // Data Point 2
                   _buildDataRow("Blood Type & Allergies", "Source: MoH Node", Icons.bloodtype),
 
                   const SizedBox(height: 30),
@@ -356,6 +357,140 @@ class _ConsentScreenState extends State<ConsentScreen> {
         ),
         const Icon(Icons.check_circle, color: Color(0xFF06B6D4), size: 18),
       ],
+    );
+  }
+}
+
+// ==========================================
+// SCREEN 4: AUDIT LOG (History)
+// ==========================================
+class AuditLogScreen extends StatelessWidget {
+  const AuditLogScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Access History"),
+        backgroundColor: Colors.transparent,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          _buildLogItem("Pantai Hospital", "Name, Blood Type", "Just Now", Colors.green),
+          _buildLogItem("Maybank", "Identity Verification", "Yesterday", Colors.amber),
+          _buildLogItem("JPJ Roadblock", "License Check", "12 Dec 2024", Colors.blue),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogItem(String title, String details, String time, Color color) {
+    return Card(
+      color: const Color(0xFF1E293B),
+      margin: const EdgeInsets.only(bottom: 15),
+      child: ListTile(
+        leading: Icon(Icons.security, color: color),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        subtitle: Text(details, style: const TextStyle(color: Colors.grey)),
+        trailing: Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// SCREEN 5: RECOVERY (Shard Animation)
+// ==========================================
+class RecoveryScreen extends StatefulWidget {
+  const RecoveryScreen({super.key});
+
+  @override
+  State<RecoveryScreen> createState() => _RecoveryScreenState();
+}
+
+class _RecoveryScreenState extends State<RecoveryScreen> {
+  int _step = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startRecovery();
+  }
+
+  void _startRecovery() async {
+    await Future.delayed(const Duration(seconds: 1));
+    setState(() => _step = 1); // Bank Verified
+    await Future.delayed(const Duration(seconds: 1));
+    setState(() => _step = 2); // Family Verified
+    await Future.delayed(const Duration(seconds: 1));
+    setState(() => _step = 3); // Gov Verified
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Social Recovery"), backgroundColor: Colors.transparent),
+      body: Padding(
+        padding: const EdgeInsets.all(25.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Restoring Identity...", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const Text("Contacting trusted guardians to rebuild private key.", style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 30),
+
+            _buildShardStep("Bank Guardian (Maybank)", _step >= 1),
+            _buildShardStep("Family Guardian (Wife)", _step >= 2),
+            _buildShardStep("Government Node (JPN)", _step >= 3),
+
+            const Spacer(),
+            if (_step == 3)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.green),
+                ),
+                child: const Text(
+                  "SUCCESS: Identity Restored on new device.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                ),
+              )
+            else
+              const Center(child: CircularProgressIndicator(color: Color(0xFF06B6D4))),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShardStep(String title, bool isDone) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: isDone ? Colors.green.withOpacity(0.1) : const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: isDone ? Colors.green : Colors.transparent),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isDone ? Icons.check_circle : Icons.hourglass_empty,
+            color: isDone ? Colors.green : Colors.grey,
+          ),
+          const SizedBox(width: 15),
+          Text(title, style: TextStyle(
+              color: isDone ? Colors.white : Colors.grey,
+              fontWeight: isDone ? FontWeight.bold : FontWeight.normal
+          )),
+        ],
+      ),
     );
   }
 }
