@@ -26,7 +26,7 @@ class MyKadNexusApp extends StatelessWidget {
 }
 
 // ==========================================
-// SCREEN 1: LOCK SCREEN (Entry Point)
+// SCREEN 1: LOCK SCREEN
 // ==========================================
 class LockScreen extends StatefulWidget {
   const LockScreen({super.key});
@@ -91,7 +91,7 @@ class _LockScreenState extends State<LockScreen> {
 }
 
 // ==========================================
-// SCREEN 2: DASHBOARD (Main Hub)
+// SCREEN 2: DASHBOARD
 // ==========================================
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -104,7 +104,6 @@ class DashboardScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          // HISTORY BUTTON - Now Functional!
           IconButton(
             icon: const Icon(Icons.history),
             onPressed: () {
@@ -121,7 +120,7 @@ class DashboardScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // User Profile Card
+            // User Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -157,13 +156,14 @@ class DashboardScreen extends StatelessWidget {
             const Text("Quick Actions", style: TextStyle(color: Colors.grey)),
             const SizedBox(height: 10),
 
-            // Scanner Button
+            // SCANNER BUTTON
             Center(
               child: GestureDetector(
                 onTap: () {
+                  // Go to Fake Scanner -> Then Consent Screen
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ConsentScreen()),
+                    MaterialPageRoute(builder: (context) => const ScannerSimulationScreen()),
                   );
                 },
                 child: Container(
@@ -188,7 +188,7 @@ class DashboardScreen extends StatelessWidget {
             ),
             const Spacer(),
 
-            // RECOVERY BUTTON - Now Functional!
+            // RECOVERY BUTTON
             Center(
               child: TextButton.icon(
                 onPressed: () {
@@ -210,7 +210,125 @@ class DashboardScreen extends StatelessWidget {
 }
 
 // ==========================================
-// SCREEN 3: GRANULAR CONSENT (The Interaction)
+// NEW SCREEN: FAKE SCANNER ANIMATION
+// ==========================================
+class ScannerSimulationScreen extends StatefulWidget {
+  const ScannerSimulationScreen({super.key});
+
+  @override
+  State<ScannerSimulationScreen> createState() => _ScannerSimulationScreenState();
+}
+
+class _ScannerSimulationScreenState extends State<ScannerSimulationScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // 1. Setup Scanning Animation Loop
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    // 2. Auto-Navigate after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const ConsentScreen()),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // Background Camera Placeholder
+          Container(
+            color: Colors.black54,
+            child: const Center(
+              child: Icon(Icons.qr_code, size: 200, color: Colors.white10),
+            ),
+          ),
+
+          // Viewfinder Box
+          Center(
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white, width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+
+          // Animated Scanning Line (The Laser)
+          Center(
+            child: SizedBox(
+              width: 250,
+              height: 250,
+              child: AnimatedBuilder(
+                animation: _controller,
+                builder: (context, child) {
+                  return Align(
+                    alignment: Alignment(0, _controller.value * 2 - 1),
+                    child: Container(
+                      height: 2,
+                      width: 240,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF06B6D4), // Cyan Laser
+                        boxShadow: [
+                          BoxShadow(color: Color(0xFF06B6D4), blurRadius: 10, spreadRadius: 1)
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+
+          // Instruction Text
+          const Positioned(
+            bottom: 100,
+            left: 0,
+            right: 0,
+            child: Text(
+              "Align QR Code within frame",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+
+          // Close Button
+          Positioned(
+            top: 50,
+            left: 20,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// SCREEN 3: CONSENT POPUP
 // ==========================================
 class ConsentScreen extends StatefulWidget {
   const ConsentScreen({super.key});
@@ -225,13 +343,13 @@ class _ConsentScreenState extends State<ConsentScreen> {
 
   void _approveAccess() {
     setState(() => _isTransferring = true);
-    // Simulate API Call to JPN/MoH Nodes
+    // Simulate API Call
     Future.delayed(const Duration(seconds: 2), () {
       setState(() {
         _isTransferring = false;
         _completed = true;
       });
-      // Auto close after success
+      // Auto close popup
       Future.delayed(const Duration(seconds: 2), () {
         Navigator.pop(context);
       });
