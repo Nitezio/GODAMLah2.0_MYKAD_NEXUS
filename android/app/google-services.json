@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "71451076874",
+    "firebase_url": "https://godamlah2-mykad-nexus-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "godamlah2-mykad-nexus",
+    "storage_bucket": "godamlah2-mykad-nexus.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:71451076874:android:7035f6eb460a1a79c972f3",
+        "android_client_info": {
+          "package_name": "com.example.godamlah_v2_mykad_nexus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkjvGeBdTFtn7rqzrme0J27RHi2Oa7QaQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
