@@ -11,7 +11,13 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:image_picker/image_picker.dart'; // For No-NFC Face Scan
+import 'package:image_picker/image_picker.dart';
+
+// =========================================================
+// ⚡ CONTROL CENTER (CHANGE THIS FOR PRODUCTION)
+// =========================================================
+const bool isProduction = false; // Set to TRUE to hide Dev buttons
+// =========================================================
 
 // GLOBAL THEME CONTROLLER
 ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
@@ -47,7 +53,7 @@ class MyKadNexusApp extends StatelessWidget {
             appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF0F172A), foregroundColor: Colors.white, elevation: 0),
           ),
           themeMode: mode,
-          home: const StartupCheck(),
+          home: const SplashScreen(),
           debugShowCheckedModeBanner: false,
         );
       },
@@ -56,11 +62,72 @@ class MyKadNexusApp extends StatelessWidget {
 }
 
 // ==========================================
-// 0. STARTUP CONTROLLER
+// 0. ANIMATED SPLASH SCREEN
+// ==========================================
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _startAnimation();
+  }
+
+  void _startAnimation() async {
+    // Show splash for 3 seconds, then move to logic check
+    await Future.delayed(const Duration(seconds: 3));
+    if (mounted) {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const StartupCheck()));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A), // Dark Background
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // LOGO SECTION
+            // If you added the asset successfully, uncomment the line below and remove the Container+Icon:
+            // Image.asset('assets/app_icon.png', width: 120),
+
+            // Fallback Icon (Safe to use even if asset is missing)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF06B6D4).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.shield, size: 80, color: Color(0xFF06B6D4)),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+                "MyKad Nexus",
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5)
+            ),
+            const SizedBox(height: 10),
+            const Text("Sovereign Identity Wallet", style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 50),
+            const CircularProgressIndicator(color: Color(0xFF06B6D4)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 0.1 STARTUP CONTROLLER
 // ==========================================
 class StartupCheck extends StatefulWidget {
   const StartupCheck({super.key});
-
   @override
   State<StartupCheck> createState() => _StartupCheckState();
 }
@@ -71,11 +138,9 @@ class _StartupCheckState extends State<StartupCheck> {
     super.initState();
     _checkRegistration();
   }
-
   void _checkRegistration() async {
     final prefs = await SharedPreferences.getInstance();
     bool isRegistered = prefs.getBool('isRegistered') ?? false;
-
     if (mounted) {
       if (isRegistered) {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
@@ -84,19 +149,15 @@ class _StartupCheckState extends State<StartupCheck> {
       }
     }
   }
-
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
-  }
+  Widget build(BuildContext context) => const Scaffold(body: Center(child: CircularProgressIndicator()));
 }
 
 // ==========================================
-// 1. REGISTRATION SCREEN (Updated for No NFC)
+// 1. REGISTRATION SCREEN
 // ==========================================
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
-
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
 }
@@ -106,11 +167,26 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final TextEditingController _icController = TextEditingController();
   final LocalAuthentication auth = LocalAuthentication();
   bool _nfcBound = false;
-  bool _useFaceFallback = false; // Track if user chose No NFC
+  bool _useFaceFallback = false;
+
+  void _devForceRegister() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isRegistered', true);
+    await prefs.setString('userIC', "880505-10-5555");
+    await prefs.setString('userName', "Ali Bin Ahmad (Dev)");
+    await prefs.setString('userPewaris', "Not Set");
+    if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text("Registration"),
+        actions: !isProduction ? [
+          TextButton(onPressed: _devForceRegister, child: const Text("DEV: SKIP", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)))
+        ] : [],
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -123,10 +199,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  // Step 1: Input IC
   Widget _buildInputStep() {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const Icon(Icons.app_registration, size: 80, color: Color(0xFF06B6D4)),
         const SizedBox(height: 20),
@@ -135,40 +209,28 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         const SizedBox(height: 30),
         TextField(
           controller: _icController,
-          decoration: InputDecoration(
-            filled: true,
-            hintText: "Example: 990101-10-5555",
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            prefixIcon: const Icon(Icons.badge),
-          ),
+          decoration: InputDecoration(filled: true, hintText: "Example: 990101-10-5555", border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), prefixIcon: const Icon(Icons.badge)),
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 20),
         ElevatedButton(
-          onPressed: () {
-            if (_icController.text.length > 5) setState(() => _currentStep = 1);
-          },
+          onPressed: () { if (_icController.text.length > 5) setState(() => _currentStep = 1); },
           child: const Text("Register Identity"),
         )
       ],
     );
   }
 
-  // Step 2: eKYC (OCR Simulation)
   Widget _buildeKYCStep() {
     return Column(
       children: [
         const Text("eKYC Verification", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        const Text("We need to verify your physical card.", style: TextStyle(color: Colors.grey)),
         const SizedBox(height: 40),
         _buildFakeScanButton("Scan IC Front"),
         const SizedBox(height: 15),
         _buildFakeScanButton("Scan IC Back"),
         const SizedBox(height: 40),
-        ElevatedButton(
-          onPressed: () => setState(() => _currentStep = 2),
-          child: const Text("Proceed to Device Binding"),
-        )
+        ElevatedButton(onPressed: () => setState(() => _currentStep = 2), child: const Text("Proceed to Device Binding"))
       ],
     );
   }
@@ -177,14 +239,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     return Container(
       width: double.infinity, height: 100,
       decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(10)),
-      child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.camera_alt, color: Colors.grey),
-        Text(label),
-      ])),
+      child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Icon(Icons.camera_alt, color: Colors.grey), Text(label)])),
     );
   }
 
-  // Step 3A: NFC Bind (Standard)
   Widget _buildNFCStep() {
     if (!_nfcBound) _startBindingNFC();
     return Column(
@@ -195,19 +253,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         const Text("Tap your MyKad to bind.", style: TextStyle(color: Colors.grey)),
         const SizedBox(height: 30),
         if (_nfcBound)
-          ElevatedButton(
-            onPressed: () => setState(() => _currentStep = 3),
-            child: const Text("Continue to Biometrics"),
-          )
+          ElevatedButton(onPressed: () => setState(() => _currentStep = 3), child: const Text("Continue to Biometrics"))
         else ...[
           const CircularProgressIndicator(color: Colors.amber),
           const SizedBox(height: 30),
-          // SCENARIO 1: NO NFC FALLBACK BUTTON
           TextButton(
-            onPressed: () {
-              NfcManager.instance.stopSession();
-              setState(() => _useFaceFallback = true); // Switch to Face Mode
-            },
+            onPressed: () { NfcManager.instance.stopSession(); setState(() => _useFaceFallback = true); },
             child: const Text("Phone doesn't have NFC?", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
           )
         ]
@@ -215,32 +266,22 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
-  // Step 3B: Face Fallback (Scenario 1 Solution)
   Widget _buildFaceFallbackStep() {
     return Column(
       children: [
         const Icon(Icons.face_retouching_natural, size: 80, color: Color(0xFF06B6D4)),
         const SizedBox(height: 20),
         const Text("Facial Liveness Check", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        const Text("Since NFC is unavailable, we will use biometrics to retrieve your Access Key.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
         const SizedBox(height: 40),
         ElevatedButton.icon(
           onPressed: () async {
-            // Simulate Camera Opening
             final ImagePicker picker = ImagePicker();
-            // We don't actually need the image for the prototype, just the action
-            await picker.pickImage(source: ImageSource.camera);
-
-            // Simulate Server Check
+            try { await picker.pickImage(source: ImageSource.camera); } catch(e) {/*ignore*/}
             showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator()));
             await Future.delayed(const Duration(seconds: 2));
-            if(mounted) {
-              Navigator.pop(context); // Close spinner
-              setState(() => _currentStep = 3); // Go to Bio Setup
-            }
+            if(mounted) { Navigator.pop(context); setState(() => _currentStep = 3); }
           },
-          icon: const Icon(Icons.camera_front),
-          label: const Text("Start Face Scan"),
+          icon: const Icon(Icons.camera_front), label: const Text("Start Face Scan"),
         ),
       ],
     );
@@ -248,11 +289,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   void _startBindingNFC() async {
     bool isAvailable = await NfcManager.instance.isAvailable();
-    if (!isAvailable) {
-      // Auto-switch if hardware missing
-      if(mounted) setState(() => _useFaceFallback = true);
-      return;
-    }
+    if (!isAvailable) { if(mounted) setState(() => _useFaceFallback = true); return; }
     NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
       if (Vibration.hasVibrator() != null) Vibration.vibrate();
       setState(() => _nfcBound = true);
@@ -260,7 +297,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     });
   }
 
-  // Step 4: Biometrics Setup
   Widget _buildBioStep() {
     return Column(
       children: [
@@ -268,10 +304,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         const SizedBox(height: 20),
         const Text("Secure Your App", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
         const SizedBox(height: 40),
-        ElevatedButton(
-          onPressed: _finishRegistration,
-          child: const Text("Enable & Finish Setup"),
-        )
+        ElevatedButton(onPressed: _finishRegistration, child: const Text("Enable & Finish Setup"))
       ],
     );
   }
@@ -279,31 +312,24 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   void _finishRegistration() async {
     bool authenticated = false;
     try {
-      authenticated = await auth.authenticate(
-        localizedReason: 'Scan to enable biometric login',
-        options: const AuthenticationOptions(stickyAuth: true),
-      );
+      authenticated = await auth.authenticate(localizedReason: 'Scan to enable biometric login', options: const AuthenticationOptions(stickyAuth: true));
     } catch (e) { authenticated = true; }
-
     if (authenticated) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isRegistered', true);
       await prefs.setString('userIC', _icController.text);
-      // We only store Name/IC locally. No heavy data.
       await prefs.setString('userName', "Ali Bin Ahmad");
       await prefs.setString('userPewaris', "Not Set");
-
       if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
     }
   }
 }
 
 // ==========================================
-// 2. LOGIN SCREEN (Updated for Device Migration)
+// 2. LOGIN SCREEN
 // ==========================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
-
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -322,27 +348,21 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!isAvailable) return;
     NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
       if (Vibration.hasVibrator() != null) Vibration.vibrate();
-      if (mounted) _goToDashboard(isMigration: true); // SCENARIO 2: NFC Login implies physical possession
+      if (mounted) _goToDashboard(isMigration: true);
       NfcManager.instance.stopSession();
     });
   }
 
   void _startBioLogin() async {
     try {
-      bool authenticated = await auth.authenticate(
-        localizedReason: 'Authenticate to access identity',
-        options: const AuthenticationOptions(stickyAuth: true, biometricOnly: true),
-      );
+      bool authenticated = await auth.authenticate(localizedReason: 'Authenticate to access identity', options: const AuthenticationOptions(stickyAuth: true, biometricOnly: true));
       if (authenticated) _goToDashboard(isMigration: false);
     } catch (e) { /* error */ }
   }
 
   void _goToDashboard({required bool isMigration}) {
     if (isMigration) {
-      // SCENARIO 2 SOLUTION: Show that we handled the "Lost Phone" case
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Device Bound. Previous sessions revoked."), backgroundColor: Colors.blue),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Device Bound. Previous sessions revoked."), backgroundColor: Colors.blue));
     }
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
   }
@@ -350,6 +370,12 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent, elevation: 0,
+        actions: !isProduction ? [
+          TextButton(onPressed: () => _goToDashboard(isMigration: false), child: const Text("DEV: LOGIN", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)))
+        ] : [],
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -362,11 +388,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 20),
             const Text("- OR -"),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _startBioLogin,
-              icon: const Icon(Icons.fingerprint),
-              label: const Text("Use Fingerprint / FaceID"),
-            ),
+            ElevatedButton.icon(onPressed: _startBioLogin, icon: const Icon(Icons.fingerprint), label: const Text("Use Fingerprint / FaceID")),
           ],
         ),
       ),
@@ -375,12 +397,11 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 // ==========================================
-// 3. DASHBOARD LISTENER (Feature 6 & 7)
+// 3. DASHBOARD LISTENER
 // ==========================================
 class DashboardListenerWrapper extends StatefulWidget {
   final Widget child;
   const DashboardListenerWrapper({super.key, required this.child});
-
   @override
   State<DashboardListenerWrapper> createState() => _DashboardListenerWrapperState();
 }
@@ -423,25 +444,16 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
       context: context, barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: Text("$requesterName needs help!"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Enter code displayed on their screen:"),
-            TextField(controller: codeController, keyboardType: TextInputType.number, textAlign: TextAlign.center),
-          ],
-        ),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Enter code displayed on their screen:"), TextField(controller: codeController, keyboardType: TextInputType.number, textAlign: TextAlign.center)]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Ignore")),
-          ElevatedButton(
-            onPressed: () async {
-              if (codeController.text == correctCode) {
-                String safeIC = _myIC!.replaceAll('-', '');
-                await FirebaseDatabase.instance.ref("recovery_mailbox/$safeIC").update({'status': 'approved'});
-                Navigator.pop(ctx);
-              }
-            },
-            child: const Text("APPROVE"),
-          )
+          ElevatedButton(onPressed: () async {
+            if (codeController.text == correctCode) {
+              String safeIC = _myIC!.replaceAll('-', '');
+              await FirebaseDatabase.instance.ref("recovery_mailbox/$safeIC").update({'status': 'approved'});
+              Navigator.pop(ctx);
+            }
+          }, child: const Text("APPROVE"))
         ],
       ),
     );
@@ -455,27 +467,19 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
         content: Text("$name wants to add you as their Pewaris ($relation)."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Decline")),
-          ElevatedButton(
-            onPressed: () async {
-              String safeIC = _myIC!.replaceAll('-', '');
-              await FirebaseDatabase.instance.ref("pewaris_requests/$safeIC").update({'status': 'accepted'});
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Accepted Pewaris Request")));
-            },
-            child: const Text("ACCEPT"),
-          )
+          ElevatedButton(onPressed: () async {
+            String safeIC = _myIC!.replaceAll('-', '');
+            await FirebaseDatabase.instance.ref("pewaris_requests/$safeIC").update({'status': 'accepted'});
+            Navigator.pop(ctx);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Accepted Pewaris Request")));
+          }, child: const Text("ACCEPT"))
         ],
       ),
     );
   }
 
   @override
-  void dispose() {
-    _recoveryListener?.cancel();
-    _pewarisRequestListener?.cancel();
-    super.dispose();
-  }
-
+  void dispose() { _recoveryListener?.cancel(); _pewarisRequestListener?.cancel(); super.dispose(); }
   @override
   Widget build(BuildContext context) => widget.child;
 }
@@ -485,7 +489,6 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
 // ==========================================
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
-
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
@@ -494,10 +497,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String name = "Loading...", ic = "...", pewaris = "Loading...";
 
   @override
-  void initState() {
-    super.initState();
-    _loadUserData();
-  }
+  void initState() { super.initState(); _loadUserData(); }
 
   void _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -522,64 +522,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text("MyKad Nexus", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                    IconButton(
-                      icon: const Icon(Icons.settings),
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _loadUserData()),
-                    ),
+                    IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen())).then((_) => _loadUserData())),
                   ],
                 ),
                 const SizedBox(height: 20),
-
                 Container(
                   padding: const EdgeInsets.all(25),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF334155)]),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF334155)]), borderRadius: BorderRadius.circular(20)),
                   child: Column(
                     children: [
-                      Row(children: [
-                        const CircleAvatar(child: Icon(Icons.person)),
-                        const SizedBox(width: 15),
-                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(name.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          Text(ic, style: const TextStyle(color: Color(0xFF06B6D4))),
-                        ])
-                      ]),
+                      Row(children: [const CircleAvatar(child: Icon(Icons.person)), const SizedBox(width: 15), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), Text(ic, style: const TextStyle(color: Color(0xFF06B6D4)))])]),
                       const Divider(color: Colors.white24, height: 30),
-                      Row(children: [
-                        const Icon(Icons.family_restroom, color: Colors.grey, size: 18),
-                        const SizedBox(width: 10),
-                        Text("Pewaris: $pewaris", style: const TextStyle(color: Colors.white70)),
-                      ])
+                      Row(children: [const Icon(Icons.family_restroom, color: Colors.grey, size: 18), const SizedBox(width: 10), Text("Pewaris: $pewaris", style: const TextStyle(color: Colors.white70))])
                     ],
                   ),
                 ),
                 const SizedBox(height: 30),
-
                 Expanded(
                   child: GestureDetector(
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ScannerScreen())),
                     child: Container(
                       width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E293B) : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF06B6D4), width: 2),
-                      ),
-                      child: const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.qr_code_scanner, size: 60, color: Color(0xFF06B6D4)),
-                          SizedBox(height: 10),
-                          Text("Scan Service QR", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
+                      decoration: BoxDecoration(color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E293B) : Colors.grey[200], borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF06B6D4), width: 2)),
+                      child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.qr_code_scanner, size: 60, color: Color(0xFF06B6D4)), SizedBox(height: 10), Text("Scan Service QR", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))]),
                     ),
                   ),
                 ),
                 const SizedBox(height: 20),
-
                 Row(
                   children: [
                     Expanded(child: _buildBtn(Icons.history, "History", Colors.blue, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AuditLogScreen())))),
@@ -600,22 +569,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20),
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E293B) : Colors.grey[200],
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Column(children: [
-          Icon(icon, color: color, size: 30),
-          const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ]),
+        decoration: BoxDecoration(color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E293B) : Colors.grey[200], borderRadius: BorderRadius.circular(15)),
+        child: Column(children: [Icon(icon, color: color, size: 30), const SizedBox(height: 8), Text(label, style: const TextStyle(fontWeight: FontWeight.bold))]),
       ),
     );
   }
 }
 
 // ==========================================
-// 5. SCANNER & CONSENT (Updated Logic)
+// 5. SCANNER & CONSENT
 // ==========================================
 class ScannerScreen extends StatelessWidget {
   const ScannerScreen({super.key});
@@ -627,8 +589,7 @@ class ScannerScreen extends StatelessWidget {
         onDetect: (capture) {
           final List<Barcode> barcodes = capture.barcodes;
           if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
-            final String code = barcodes.first.rawValue!;
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ConsentScreen(sessionId: code)));
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => ConsentScreen(sessionId: barcodes.first.rawValue!)));
           }
         },
       ),
@@ -639,7 +600,6 @@ class ScannerScreen extends StatelessWidget {
 class ConsentScreen extends StatefulWidget {
   final String sessionId;
   const ConsentScreen({super.key, required this.sessionId});
-
   @override
   State<ConsentScreen> createState() => _ConsentScreenState();
 }
@@ -650,13 +610,7 @@ class _ConsentScreenState extends State<ConsentScreen> {
 
   void _triggerApproval() async {
     bool authenticated = false;
-    try {
-      authenticated = await auth.authenticate(
-        localizedReason: 'Biometric Approval Required',
-        options: const AuthenticationOptions(stickyAuth: true, biometricOnly: true),
-      );
-    } catch (e) { authenticated = true; }
-
+    try { authenticated = await auth.authenticate(localizedReason: 'Biometric Approval Required', options: const AuthenticationOptions(stickyAuth: true, biometricOnly: true)); } catch (e) { authenticated = true; }
     if (authenticated) {
       final prefs = await SharedPreferences.getInstance();
       final data = {
@@ -666,17 +620,11 @@ class _ConsentScreenState extends State<ConsentScreen> {
         "allergies": _permissions['Allergy Info']! ? "Penicillin" : "ACCESS DENIED",
         "status": "completed",
       };
-
       await FirebaseDatabase.instance.ref("requests/${widget.sessionId}").set(data);
-
       List<String> history = prefs.getStringList('audit_history') ?? [];
       history.insert(0, "Pantai Hospital|Shared Data|${DateTime.now().toString()}");
       await prefs.setStringList('audit_history', history);
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Data Sent!"), backgroundColor: Colors.green));
-      }
+      if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Data Sent!"), backgroundColor: Colors.green)); }
     }
   }
 
@@ -687,27 +635,8 @@ class _ConsentScreenState extends State<ConsentScreen> {
       body: Column(
         children: [
           const Padding(padding: EdgeInsets.all(20), child: Text("Uncheck items to deny access.")),
-          Expanded(
-            child: ListView(
-              children: _permissions.keys.map((key) {
-                return SwitchListTile(
-                  title: Text(key),
-                  subtitle: Text(_permissions[key]! ? "Granted" : "Denied", style: TextStyle(color: _permissions[key]! ? Colors.green : Colors.red)),
-                  value: _permissions[key]!,
-                  onChanged: (val) => setState(() => _permissions[key] = val),
-                );
-              }).toList(),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: ElevatedButton.icon(
-              onPressed: _triggerApproval,
-              icon: const Icon(Icons.fingerprint),
-              label: const Text("APPROVE WITH BIOMETRICS"),
-              style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50), backgroundColor: const Color(0xFF06B6D4), foregroundColor: Colors.white),
-            ),
-          )
+          Expanded(child: ListView(children: _permissions.keys.map((key) => SwitchListTile(title: Text(key), subtitle: Text(_permissions[key]! ? "Granted" : "Denied", style: TextStyle(color: _permissions[key]! ? Colors.green : Colors.red)), value: _permissions[key]!, onChanged: (val) => setState(() => _permissions[key] = val))).toList())),
+          Padding(padding: const EdgeInsets.all(20), child: ElevatedButton.icon(onPressed: _triggerApproval, icon: const Icon(Icons.fingerprint), label: const Text("APPROVE WITH BIOMETRICS"), style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50), backgroundColor: const Color(0xFF06B6D4), foregroundColor: Colors.white)))
         ],
       ),
     );
@@ -726,31 +655,18 @@ class AuditLogScreen extends StatefulWidget {
 class _AuditLogScreenState extends State<AuditLogScreen> {
   List<String> logs = [];
   @override
-  void initState() {
-    super.initState();
-    SharedPreferences.getInstance().then((prefs) => setState(() => logs = prefs.getStringList('audit_history') ?? []));
-  }
+  void initState() { super.initState(); SharedPreferences.getInstance().then((prefs) => setState(() => logs = prefs.getStringList('audit_history') ?? [])); }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Access History")),
-      body: ListView.builder(
-        itemCount: logs.length,
-        itemBuilder: (ctx, i) {
-          final parts = logs[i].split('|');
-          return ListTile(
-            leading: const Icon(Icons.history, color: Colors.blue),
-            title: Text(parts.length > 0 ? parts[0] : "?"),
-            subtitle: Text(parts.length > 2 ? parts[2].substring(0, 16) : "-"),
-          );
-        },
-      ),
+      body: ListView.builder(itemCount: logs.length, itemBuilder: (ctx, i) { final parts = logs[i].split('|'); return ListTile(leading: const Icon(Icons.history, color: Colors.blue), title: Text(parts.length > 0 ? parts[0] : "?"), subtitle: Text(parts.length > 2 ? parts[2].substring(0, 16) : "-")); }),
     );
   }
 }
 
 // ==========================================
-// 7. RECOVERY SCREEN (Updated for Scenario 3)
+// 7. RECOVERY SCREEN (UPDATED: SMART LOGIC)
 // ==========================================
 class RecoveryScreen extends StatefulWidget {
   const RecoveryScreen({super.key});
@@ -762,7 +678,28 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
   int _state = 0;
   String _code = "00";
   bool _pewarisApproved = false;
-  final String _targetPewarisIC = "990101-10-1111";
+
+  // NEW LOGIC VARS
+  bool _hasPewaris = false;
+  String _pewarisIC = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPewarisStatus();
+  }
+
+  void _checkPewarisStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    String p = prefs.getString('userPewaris') ?? "Not Set";
+
+    if (p != "Not Set") {
+      setState(() {
+        _hasPewaris = true;
+        _pewarisIC = "990101-10-1111";
+      });
+    }
+  }
 
   void _startRecovery() async {
     setState(() { _state = 1; _code = (Random().nextInt(90) + 10).toString(); });
@@ -771,19 +708,28 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     if(!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("JPN Notified of Lost Card")));
 
-    String safeTarget = _targetPewarisIC.replaceAll('-', '');
-    final ref = FirebaseDatabase.instance.ref("recovery_mailbox/$safeTarget");
-    await ref.set({ "code": _code, "requester": "Ali Bin Ahmad", "status": "pending" });
+    if (_hasPewaris) {
+      // PATH A: HAS PEWARIS
+      String safeTarget = _pewarisIC.replaceAll('-', '');
+      final ref = FirebaseDatabase.instance.ref("recovery_mailbox/$safeTarget");
+      await ref.set({ "code": _code, "requester": "Ali Bin Ahmad", "status": "pending" });
 
-    ref.child("status").onValue.listen((event) {
-      if (event.snapshot.value == "approved" && mounted) {
+      ref.child("status").onValue.listen((event) {
+        if (event.snapshot.value == "approved" && mounted) {
+          setState(() => _pewarisApproved = true);
+          if (Vibration.hasVibrator() != null) Vibration.vibrate();
+        }
+      });
+    } else {
+      // PATH B: NO PEWARIS
+      await Future.delayed(const Duration(seconds: 3));
+      if(mounted) {
         setState(() => _pewarisApproved = true);
         if (Vibration.hasVibrator() != null) Vibration.vibrate();
       }
-    });
+    }
   }
 
-  // SCENARIO 3: LOST EVERYTHING DIALOG
   void _showTotalLossHelp() {
     showDialog(
       context: context,
@@ -806,14 +752,16 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              const Icon(Icons.shield_outlined, size: 80, color: Colors.green),
+              const SizedBox(height: 20),
               ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)),
                   onPressed: _startRecovery,
                   child: const Text("REPORT LOST IC (Have Phone)")
               ),
               const SizedBox(height: 20),
               TextButton(
-                onPressed: _showTotalLossHelp, // SCENARIO 3 TRIGGER
+                onPressed: _showTotalLossHelp,
                 child: const Text("I lost BOTH my Phone & IC", style: TextStyle(color: Colors.red)),
               )
             ],
@@ -821,15 +769,39 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         )
             : Column(
           children: [
-            const Text("Ask Pewaris to enter this code:"),
-            Text(_code, style: const TextStyle(fontSize: 50, fontWeight: FontWeight.bold)),
+            if (_hasPewaris) ...[
+              const Text("Ask Pewaris to enter this code:", style: TextStyle(color: Colors.grey)),
+              Text(_code, style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold, letterSpacing: 5)),
+            ] else
+              const Text("Verifying with Government Nodes...", style: TextStyle(fontSize: 18, fontStyle: FontStyle.italic)),
+
             const SizedBox(height: 30),
-            _row("Bank Node", true),
-            _row("Pewaris (Wife)", _pewarisApproved),
-            _row("Govt Node", true),
+
+            _row("Bank Node (Maybank)", true), // Always auto-verify
+
+            if (_hasPewaris)
+              _row("Pewaris Guardian", _pewarisApproved)
+            else
+              Container(),
+
+            _row("Govt Node (JPN)", true),
+
             if (_pewarisApproved) ...[
-              const SizedBox(height: 20),
-              Container(padding: const EdgeInsets.all(10), color: Colors.greenAccent, child: const Text("TEMP KEY GENERATED"))
+              const SizedBox(height: 30),
+              Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.green)),
+                  child: const Column(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 40),
+                      SizedBox(height: 10),
+                      Text("IDENTITY RESTORED", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                      // --- CHANGED LINE BELOW ---
+                      Text("A new key has been created", style: TextStyle(color: Colors.white)),
+                    ],
+                  )
+              )
             ]
           ],
         ),
@@ -837,9 +809,14 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     );
   }
 
-  Widget _row(String label, bool active) => ListTile(
-    leading: Icon(active ? Icons.check_circle : Icons.hourglass_top, color: active ? Colors.green : Colors.grey),
-    title: Text(label),
+  Widget _row(String label, bool active) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8.0),
+    child: ListTile(
+      tileColor: active ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      leading: Icon(active ? Icons.check_circle : Icons.hourglass_top, color: active ? Colors.green : Colors.grey),
+      title: Text(label, style: TextStyle(color: active ? Colors.green : Colors.grey, fontWeight: active ? FontWeight.bold : FontWeight.normal)),
+    ),
   );
 }
 
@@ -878,27 +855,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           ListTile(
             title: const Text("Dark Mode"),
-            trailing: Switch(
-              value: themeNotifier.value == ThemeMode.dark,
-              onChanged: (val) => themeNotifier.value = val ? ThemeMode.dark : ThemeMode.light,
-            ),
+            trailing: Switch(value: themeNotifier.value == ThemeMode.dark, onChanged: (val) => themeNotifier.value = val ? ThemeMode.dark : ThemeMode.light),
           ),
           const Divider(),
           Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("Add Pewaris", style: TextStyle(fontWeight: FontWeight.bold)),
-                TextField(controller: _icController, decoration: const InputDecoration(labelText: "Pewaris IC Number")),
-                ElevatedButton(onPressed: _sendRequest, child: const Text("Send Invite"))
-              ],
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text("Add Pewaris", style: TextStyle(fontWeight: FontWeight.bold)),
+              TextField(controller: _icController, decoration: const InputDecoration(labelText: "Pewaris IC Number")),
+              ElevatedButton(onPressed: _sendRequest, child: const Text("Send Invite"))
+            ],
             ),
           ),
-          ListTile(
-            title: const Text("Log Out", style: TextStyle(color: Colors.red)),
-            onTap: () => Navigator.of(context).popUntil((route) => route.isFirst),
-          )
+          ListTile(title: const Text("Log Out", style: TextStyle(color: Colors.red)), onTap: () => Navigator.of(context).popUntil((route) => route.isFirst))
         ],
       ),
     );
