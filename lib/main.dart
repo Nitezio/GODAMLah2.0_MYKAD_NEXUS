@@ -19,8 +19,9 @@ import 'package:image_picker/image_picker.dart';
 const bool isProduction = false; // Set to TRUE to hide Dev buttons
 // =========================================================
 
-// GLOBAL THEME CONTROLLER
+// GLOBAL CONTROLLERS (For Instant UI Updates)
 ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
+ValueNotifier<String> pewarisStatusNotifier = ValueNotifier("Loading...");
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,7 +80,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _startAnimation() async {
-    // Show splash for 3 seconds, then move to logic check
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const StartupCheck()));
@@ -89,24 +89,25 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A), // Dark Background
+      backgroundColor: const Color(0xFF0F172A),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // LOGO SECTION
-            // If you added the asset successfully, uncomment the line below and remove the Container+Icon:
-            // Image.asset('assets/app_icon.png', width: 120),
-
-            // Fallback Icon (Safe to use even if asset is missing)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF06B6D4).withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.shield, size: 80, color: Color(0xFF06B6D4)),
-            ),
+            // Safe Asset Loader
+            Builder(builder: (context) {
+              try {
+                return Image.asset('assets/app_icon.png', width: 120, errorBuilder: (c, o, s) {
+                  return Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: const Color(0xFF06B6D4).withOpacity(0.1), shape: BoxShape.circle),
+                    child: const Icon(Icons.shield, size: 80, color: Color(0xFF06B6D4)),
+                  );
+                });
+              } catch (e) {
+                return const Icon(Icons.shield, size: 80, color: Color(0xFF06B6D4));
+              }
+            }),
             const SizedBox(height: 20),
             const Text(
                 "MyKad Nexus",
@@ -154,7 +155,7 @@ class _StartupCheckState extends State<StartupCheck> {
 }
 
 // ==========================================
-// 1. REGISTRATION SCREEN
+// 1. REGISTRATION SCREEN (With RHB Plan B)
 // ==========================================
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -168,6 +169,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final LocalAuthentication auth = LocalAuthentication();
   bool _nfcBound = false;
   bool _useFaceFallback = false;
+
+  // --- PLAN B: YOUR RHB SERIAL NUMBER ---
+  final String _targetSerial = "99:FE:E6:50";
+  // --------------------------------------
 
   void _devForceRegister() async {
     final prefs = await SharedPreferences.getInstance();
@@ -290,10 +295,31 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   void _startBindingNFC() async {
     bool isAvailable = await NfcManager.instance.isAvailable();
     if (!isAvailable) { if(mounted) setState(() => _useFaceFallback = true); return; }
+
     NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
-      if (Vibration.hasVibrator() != null) Vibration.vibrate();
-      setState(() => _nfcBound = true);
-      NfcManager.instance.stopSession();
+      String scannedID = "";
+      try {
+        List<int> idBytes = tag.data['nfca']['identifier'];
+        scannedID = idBytes.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
+      } catch (e) {
+        if(tag.data['mifare'] != null) {
+          List<int> idBytes = tag.data['mifare']['identifier'];
+          scannedID = idBytes.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
+        }
+      }
+
+      if (scannedID == _targetSerial) {
+        if (Vibration.hasVibrator() != null) Vibration.vibrate();
+        setState(() => _nfcBound = true);
+        NfcManager.instance.stopSession();
+      } else {
+        var ndef = Ndef.from(tag);
+        if (ndef != null) {
+          if (Vibration.hasVibrator() != null) Vibration.vibrate();
+          setState(() => _nfcBound = true);
+          NfcManager.instance.stopSession();
+        }
+      }
     });
   }
 
@@ -326,7 +352,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 }
 
 // ==========================================
-// 2. LOGIN SCREEN
+// 2. LOGIN SCREEN (With RHB Plan B)
 // ==========================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -336,6 +362,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final LocalAuthentication auth = LocalAuthentication();
+  final String _targetSerial = "99:FE:E6:50";
 
   @override
   void initState() {
@@ -346,10 +373,27 @@ class _LoginScreenState extends State<LoginScreen> {
   void _startNFCLogin() async {
     bool isAvailable = await NfcManager.instance.isAvailable();
     if (!isAvailable) return;
+
     NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
-      if (Vibration.hasVibrator() != null) Vibration.vibrate();
-      if (mounted) _goToDashboard(isMigration: true);
-      NfcManager.instance.stopSession();
+      String scannedID = "";
+      try {
+        List<int> idBytes = tag.data['nfca']['identifier'];
+        scannedID = idBytes.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
+      } catch (e) { /* ignore */ }
+
+      bool isMatch = false;
+      if (scannedID == _targetSerial) {
+        isMatch = true;
+      } else {
+        var ndef = Ndef.from(tag);
+        if (ndef != null) isMatch = true;
+      }
+
+      if (isMatch) {
+        if (Vibration.hasVibrator() != null) Vibration.vibrate();
+        if (mounted) _goToDashboard(isMigration: true);
+        NfcManager.instance.stopSession();
+      }
     });
   }
 
@@ -397,7 +441,7 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 // ==========================================
-// 3. DASHBOARD LISTENER
+// 3. DASHBOARD LISTENER (With Fix for Pending Status)
 // ==========================================
 class DashboardListenerWrapper extends StatefulWidget {
   final Widget child;
@@ -408,7 +452,8 @@ class DashboardListenerWrapper extends StatefulWidget {
 
 class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
   StreamSubscription? _recoveryListener;
-  StreamSubscription? _pewarisRequestListener;
+  StreamSubscription? _pewarisIncomingListener;
+  StreamSubscription? _mySentRequestListener;
   String? _myIC;
 
   @override
@@ -423,6 +468,7 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
     if (_myIC == null) return;
     String safeIC = _myIC!.replaceAll('-', '');
 
+    // 1. Listen for Recovery Help (Emergency)
     _recoveryListener = FirebaseDatabase.instance.ref("recovery_mailbox/$safeIC").onValue.listen((event) {
       final data = event.snapshot.value as Map?;
       if (data != null && data['status'] == 'pending') {
@@ -430,12 +476,34 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
       }
     });
 
-    _pewarisRequestListener = FirebaseDatabase.instance.ref("pewaris_requests/$safeIC").onValue.listen((event) {
+    // 2. Listen for Incoming Pewaris Requests (Others asking me)
+    _pewarisIncomingListener = FirebaseDatabase.instance.ref("pewaris_requests/$safeIC").onValue.listen((event) {
       final data = event.snapshot.value as Map?;
       if (data != null && data['status'] == 'pending') {
-        _showPewarisInviteDialog(data['requesterName'].toString(), data['relation'].toString());
+        _showPewarisInviteDialog(data['requesterName'].toString(), data['relation'].toString(), data['requesterIC'].toString());
       }
     });
+
+    // 3. Listen for MY Sent Request Status (Me asking others) - FIX FOR PENDING STATUS
+    String? pendingTarget = prefs.getString('pending_pewaris_ic');
+    if (pendingTarget != null) {
+      _mySentRequestListener = FirebaseDatabase.instance.ref("pewaris_requests/$pendingTarget").onValue.listen((event) {
+        final data = event.snapshot.value as Map?;
+        if (data != null && data['status'] == 'accepted') {
+          // Update Local Data
+          String newStatus = "Active (Guardian)";
+          prefs.setString('userPewaris', newStatus);
+          prefs.remove('pending_pewaris_ic'); // Stop waiting
+
+          // Force UI Update
+          pewarisStatusNotifier.value = newStatus;
+
+          if(mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Pewaris Accepted Your Request!"), backgroundColor: Colors.green));
+          }
+        }
+      });
+    }
   }
 
   void _showRecoveryDialog(String correctCode, String requesterName) {
@@ -459,7 +527,7 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
     );
   }
 
-  void _showPewarisInviteDialog(String name, String relation) {
+  void _showPewarisInviteDialog(String name, String relation, String requesterIC) {
     showDialog(
       context: context, barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -468,8 +536,9 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Decline")),
           ElevatedButton(onPressed: () async {
-            String safeIC = _myIC!.replaceAll('-', '');
-            await FirebaseDatabase.instance.ref("pewaris_requests/$safeIC").update({'status': 'accepted'});
+            // I am the target, I accept, and I update MY node because that's where the request is parked.
+            String mySafeIC = _myIC!.replaceAll('-', '');
+            await FirebaseDatabase.instance.ref("pewaris_requests/$mySafeIC").update({'status': 'accepted'});
             Navigator.pop(ctx);
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Accepted Pewaris Request")));
           }, child: const Text("ACCEPT"))
@@ -479,7 +548,12 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
   }
 
   @override
-  void dispose() { _recoveryListener?.cancel(); _pewarisRequestListener?.cancel(); super.dispose(); }
+  void dispose() {
+    _recoveryListener?.cancel();
+    _pewarisIncomingListener?.cancel();
+    _mySentRequestListener?.cancel();
+    super.dispose();
+  }
   @override
   Widget build(BuildContext context) => widget.child;
 }
@@ -504,7 +578,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       name = prefs.getString('userName') ?? "Ali Bin Ahmad";
       ic = prefs.getString('userIC') ?? "880505-10-5555";
-      pewaris = prefs.getString('userPewaris') ?? "Not Set";
+      // Initialize global notifier
+      pewarisStatusNotifier.value = prefs.getString('userPewaris') ?? "Not Set";
     });
   }
 
@@ -533,7 +608,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Row(children: [const CircleAvatar(child: Icon(Icons.person)), const SizedBox(width: 15), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), Text(ic, style: const TextStyle(color: Color(0xFF06B6D4)))])]),
                       const Divider(color: Colors.white24, height: 30),
-                      Row(children: [const Icon(Icons.family_restroom, color: Colors.grey, size: 18), const SizedBox(width: 10), Text("Pewaris: $pewaris", style: const TextStyle(color: Colors.white70))])
+                      // WATCH THE GLOBAL NOTIFIER
+                      ValueListenableBuilder<String>(
+                          valueListenable: pewarisStatusNotifier,
+                          builder: (context, status, _) {
+                            return Row(children: [const Icon(Icons.family_restroom, color: Colors.grey, size: 18), const SizedBox(width: 10), Text("Pewaris: $status", style: const TextStyle(color: Colors.white70))]);
+                          }
+                      )
                     ],
                   ),
                 ),
@@ -666,7 +747,7 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
 }
 
 // ==========================================
-// 7. RECOVERY SCREEN (UPDATED: SMART LOGIC)
+// 7. RECOVERY SCREEN (Total Loss Option Hidden)
 // ==========================================
 class RecoveryScreen extends StatefulWidget {
   const RecoveryScreen({super.key});
@@ -693,7 +774,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     final prefs = await SharedPreferences.getInstance();
     String p = prefs.getString('userPewaris') ?? "Not Set";
 
-    if (p != "Not Set") {
+    if (p.startsWith("Active")) {
       setState(() {
         _hasPewaris = true;
         _pewarisIC = "990101-10-1111";
@@ -760,10 +841,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                   child: const Text("REPORT LOST IC (Have Phone)")
               ),
               const SizedBox(height: 20),
+
+              // --- BUTTON HIDDEN FOR NOW ---
+              /*
               TextButton(
                 onPressed: _showTotalLossHelp,
                 child: const Text("I lost BOTH my Phone & IC", style: TextStyle(color: Colors.red)),
               )
+              */
+              // -----------------------------
             ],
           ),
         )
@@ -777,7 +863,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
 
             const SizedBox(height: 30),
 
-            _row("Bank Node (Maybank)", true), // Always auto-verify
+            _row("Bank Node (RHB)", true),
 
             if (_hasPewaris)
               _row("Pewaris Guardian", _pewarisApproved)
@@ -797,7 +883,6 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                       Icon(Icons.check_circle, color: Colors.green, size: 40),
                       SizedBox(height: 10),
                       Text("IDENTITY RESTORED", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                      // --- CHANGED LINE BELOW ---
                       Text("A new key has been created", style: TextStyle(color: Colors.white)),
                     ],
                   )
@@ -819,9 +904,8 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     ),
   );
 }
-
 // ==========================================
-// 8. SETTINGS SCREEN
+// 8. SETTINGS SCREEN (Fixes Pending Status)
 // ==========================================
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -834,16 +918,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _sendRequest() async {
     if (_icController.text.length < 6) return;
+    final prefs = await SharedPreferences.getInstance();
+
     String target = _icController.text.replaceAll('-', '');
+    String myIC = prefs.getString('userIC') ?? "Unknown";
+
+    // 1. Send Request to Firebase with MY IC included
     await FirebaseDatabase.instance.ref("pewaris_requests/$target").set({
       "requesterName": "Ali Bin Ahmad",
+      "requesterIC": myIC,
       "relation": "Wife",
       "status": "pending"
     });
+
+    // 2. Save TARGET ID locally so we can listen for THEIR reply
+    await prefs.setString('userPewaris', "Pending Approval...");
+    await prefs.setString('pending_pewaris_ic', target);
+
+    // 3. Update Global Notifier
+    pewarisStatusNotifier.value = "Pending Approval...";
+
     if(mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Request Sent!")));
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userPewaris', "Pending Approval...");
     }
   }
 
