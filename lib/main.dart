@@ -94,7 +94,6 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Safe Asset Loader
             Builder(builder: (context) {
               try {
                 return Image.asset('assets/app_icon.png', width: 120, errorBuilder: (c, o, s) {
@@ -155,7 +154,7 @@ class _StartupCheckState extends State<StartupCheck> {
 }
 
 // ==========================================
-// 1. REGISTRATION SCREEN (With RHB Plan B)
+// 1. REGISTRATION SCREEN (Updated Flow: eKYC -> NFC -> Face -> Bio)
 // ==========================================
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -167,12 +166,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   int _currentStep = 0;
   final TextEditingController _icController = TextEditingController();
   final LocalAuthentication auth = LocalAuthentication();
+
+  // Binding State Variables
   bool _nfcBound = false;
-  bool _useFaceFallback = false;
+  String _boundID = "";
 
   // --- PLAN B: YOUR RHB SERIAL NUMBER ---
   final String _targetSerial = "99:FE:E6:50";
-  // --------------------------------------
 
   void _devForceRegister() async {
     final prefs = await SharedPreferences.getInstance();
@@ -197,13 +197,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           padding: const EdgeInsets.all(20),
           child: _currentStep == 0 ? _buildInputStep() :
           _currentStep == 1 ? _buildeKYCStep() :
-          _currentStep == 2 ? (_useFaceFallback ? _buildFaceFallbackStep() : _buildNFCStep()) :
+          _currentStep == 2 ? _buildNFCStep() :
+          _currentStep == 3 ? _buildFaceScanStep() : // NEW MANDATORY STEP
           _buildBioStep(),
         ),
       ),
     );
   }
 
+  // Step 0: Input
   Widget _buildInputStep() {
     return Column(
       children: [
@@ -226,6 +228,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
+  // Step 1: eKYC
   Widget _buildeKYCStep() {
     return Column(
       children: [
@@ -248,35 +251,78 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
 
+  // Step 2: NFC Binding
   Widget _buildNFCStep() {
     if (!_nfcBound) _startBindingNFC();
+
     return Column(
       children: [
-        Icon(Icons.nfc, size: 80, color: _nfcBound ? Colors.green : Colors.amber),
-        const SizedBox(height: 20),
-        const Text("Device Binding", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        const Text("Tap your MyKad to bind.", style: TextStyle(color: Colors.grey)),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+          decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+          child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.nfc, size: 16, color: Colors.blue), SizedBox(width: 8), Text("MODE: MyKad NFC Binding", style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold))]),
+        ),
         const SizedBox(height: 30),
+
+        Icon(_nfcBound ? Icons.check_circle : Icons.nfc, size: 80, color: _nfcBound ? Colors.green : Colors.amber),
+        const SizedBox(height: 20),
+        Text(_nfcBound ? "Binding Successful!" : "Device Binding", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+
+        // --- CHANGED: HIDE ID AFTER BINDING ---
+        if (!_nfcBound)
+          const Text("Tap your MyKad to bind.", style: TextStyle(color: Colors.grey)),
+
+        const SizedBox(height: 30),
+
         if (_nfcBound)
-          ElevatedButton(onPressed: () => setState(() => _currentStep = 3), child: const Text("Continue to Biometrics"))
+          ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+              onPressed: () => setState(() => _currentStep = 3), // GO TO FACE SCAN
+              child: const Text("Continue to Face Scan")
+          )
         else ...[
           const CircularProgressIndicator(color: Colors.amber),
-          const SizedBox(height: 30),
+          const SizedBox(height: 20),
+
+          if (!isProduction)
+            OutlinedButton.icon(
+              onPressed: () {
+                if (Vibration.hasVibrator() != null) Vibration.vibrate();
+                setState(() {
+                  _nfcBound = true;
+                  _boundID = "$_targetSerial (Simulated)";
+                });
+                SharedPreferences.getInstance().then((prefs) {
+                  prefs.setString('bound_card_id', _targetSerial);
+                });
+              },
+              icon: const Icon(Icons.touch_app),
+              label: const Text("DEV: SIMULATE CARD TAP"),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.blue),
+            ),
+
+          const SizedBox(height: 20),
           TextButton(
-            onPressed: () { NfcManager.instance.stopSession(); setState(() => _useFaceFallback = true); },
-            child: const Text("Phone doesn't have NFC?", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
-          )
+            onPressed: () {
+              NfcManager.instance.stopSession();
+              // Skip NFC, go straight to Face
+              setState(() => _currentStep = 3);
+            },
+            child: const Text("Phone doesn't have NFC? Skip", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline)),
+          ),
         ]
       ],
     );
   }
 
-  Widget _buildFaceFallbackStep() {
+  // Step 3: Face Scanning (Mandatory)
+  Widget _buildFaceScanStep() {
     return Column(
       children: [
         const Icon(Icons.face_retouching_natural, size: 80, color: Color(0xFF06B6D4)),
         const SizedBox(height: 20),
         const Text("Facial Liveness Check", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        const Text("Verify it's really you", style: TextStyle(color: Colors.grey)),
         const SizedBox(height: 40),
         ElevatedButton.icon(
           onPressed: () async {
@@ -284,7 +330,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             try { await picker.pickImage(source: ImageSource.camera); } catch(e) {/*ignore*/}
             showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator()));
             await Future.delayed(const Duration(seconds: 2));
-            if(mounted) { Navigator.pop(context); setState(() => _currentStep = 3); }
+            if(mounted) {
+              Navigator.pop(context);
+              setState(() => _currentStep = 4); // GO TO BIOMETRICS
+            }
           },
           icon: const Icon(Icons.camera_front), label: const Text("Start Face Scan"),
         ),
@@ -294,41 +343,53 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   void _startBindingNFC() async {
     bool isAvailable = await NfcManager.instance.isAvailable();
-    if (!isAvailable) { if(mounted) setState(() => _useFaceFallback = true); return; }
+    if (!isAvailable) return;
 
     NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
-      String scannedID = "";
+      String scannedID = "Unknown";
+
       try {
-        List<int> idBytes = tag.data['nfca']['identifier'];
-        scannedID = idBytes.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
-      } catch (e) {
-        if(tag.data['mifare'] != null) {
-          List<int> idBytes = tag.data['mifare']['identifier'];
+        List<int>? idBytes;
+        if (tag.data['nfca'] != null) idBytes = List<int>.from(tag.data['nfca']['identifier']);
+        else if (tag.data['isodep'] != null) idBytes = List<int>.from(tag.data['isodep']['identifier']);
+        else if (tag.data['mifare'] != null) idBytes = List<int>.from(tag.data['mifare']['identifier']);
+
+        if (idBytes != null) {
           scannedID = idBytes.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
         }
-      }
+      } catch (e) { /* ignore */ }
 
-      if (scannedID == _targetSerial) {
+      if (scannedID != "Unknown") {
         if (Vibration.hasVibrator() != null) Vibration.vibrate();
-        setState(() => _nfcBound = true);
+
+        setState(() {
+          _nfcBound = true;
+          _boundID = scannedID;
+        });
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('bound_card_id', scannedID);
+
         NfcManager.instance.stopSession();
       } else {
         var ndef = Ndef.from(tag);
         if (ndef != null) {
           if (Vibration.hasVibrator() != null) Vibration.vibrate();
-          setState(() => _nfcBound = true);
+          setState(() { _nfcBound = true; _boundID = "NDEF Tag (Bound)"; });
           NfcManager.instance.stopSession();
         }
       }
     });
   }
 
+  // Step 4: Biometrics Setup (Last Step)
   Widget _buildBioStep() {
     return Column(
       children: [
         const Icon(Icons.fingerprint, size: 80, color: Color(0xFF06B6D4)),
         const SizedBox(height: 20),
         const Text("Secure Your App", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        const Text("Enable Fingerprint / System Lock", style: TextStyle(color: Colors.grey)),
         const SizedBox(height: 40),
         ElevatedButton(onPressed: _finishRegistration, child: const Text("Enable & Finish Setup"))
       ],
@@ -352,7 +413,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 }
 
 // ==========================================
-// 2. LOGIN SCREEN (With RHB Plan B)
+// 2. LOGIN SCREEN
 // ==========================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -362,7 +423,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final LocalAuthentication auth = LocalAuthentication();
-  final String _targetSerial = "99:FE:E6:50";
+  final String _targetSerial = "99:FE:E6:50"; // RHB Master Key
 
   @override
   void initState() {
@@ -376,23 +437,29 @@ class _LoginScreenState extends State<LoginScreen> {
 
     NfcManager.instance.startSession(onDiscovered: (NfcTag tag) async {
       String scannedID = "";
+
       try {
-        List<int> idBytes = tag.data['nfca']['identifier'];
-        scannedID = idBytes.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
+        List<int>? idBytes;
+        if (tag.data['nfca'] != null) idBytes = List<int>.from(tag.data['nfca']['identifier']);
+        else if (tag.data['isodep'] != null) idBytes = List<int>.from(tag.data['isodep']['identifier']);
+
+        if (idBytes != null) {
+          scannedID = idBytes.map((e) => e.toRadixString(16).padLeft(2, '0')).join(':').toUpperCase();
+        }
       } catch (e) { /* ignore */ }
 
-      bool isMatch = false;
-      if (scannedID == _targetSerial) {
-        isMatch = true;
-      } else {
-        var ndef = Ndef.from(tag);
-        if (ndef != null) isMatch = true;
-      }
+      final prefs = await SharedPreferences.getInstance();
+      String? registeredID = prefs.getString('bound_card_id');
 
-      if (isMatch) {
+      bool isMatch = (scannedID == registeredID) || (scannedID == _targetSerial);
+      if (registeredID == null && scannedID == _targetSerial) isMatch = true;
+
+      if (isMatch && scannedID.isNotEmpty) {
         if (Vibration.hasVibrator() != null) Vibration.vibrate();
         if (mounted) _goToDashboard(isMigration: true);
         NfcManager.instance.stopSession();
+      } else {
+        NfcManager.instance.stopSession(errorMessage: "Wrong Card! Please tap the bound MyKad.");
       }
     });
   }
@@ -441,7 +508,7 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 // ==========================================
-// 3. DASHBOARD LISTENER (With Fix for Pending Status)
+// 3. DASHBOARD LISTENER
 // ==========================================
 class DashboardListenerWrapper extends StatefulWidget {
   final Widget child;
@@ -468,7 +535,6 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
     if (_myIC == null) return;
     String safeIC = _myIC!.replaceAll('-', '');
 
-    // 1. Listen for Recovery Help (Emergency)
     _recoveryListener = FirebaseDatabase.instance.ref("recovery_mailbox/$safeIC").onValue.listen((event) {
       final data = event.snapshot.value as Map?;
       if (data != null && data['status'] == 'pending') {
@@ -476,7 +542,6 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
       }
     });
 
-    // 2. Listen for Incoming Pewaris Requests (Others asking me)
     _pewarisIncomingListener = FirebaseDatabase.instance.ref("pewaris_requests/$safeIC").onValue.listen((event) {
       final data = event.snapshot.value as Map?;
       if (data != null && data['status'] == 'pending') {
@@ -484,18 +549,18 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
       }
     });
 
-    // 3. Listen for MY Sent Request Status (Me asking others) - FIX FOR PENDING STATUS
     String? pendingTarget = prefs.getString('pending_pewaris_ic');
     if (pendingTarget != null) {
       _mySentRequestListener = FirebaseDatabase.instance.ref("pewaris_requests/$pendingTarget").onValue.listen((event) {
         final data = event.snapshot.value as Map?;
         if (data != null && data['status'] == 'accepted') {
-          // Update Local Data
-          String newStatus = "Active (Guardian)";
-          prefs.setString('userPewaris', newStatus);
-          prefs.remove('pending_pewaris_ic'); // Stop waiting
+          String savedRelation = prefs.getString('pending_pewaris_relation') ?? "Guardian";
+          String newStatus = "Active ($savedRelation)";
 
-          // Force UI Update
+          prefs.setString('userPewaris', newStatus);
+          prefs.remove('pending_pewaris_ic');
+          prefs.remove('pending_pewaris_relation');
+
           pewarisStatusNotifier.value = newStatus;
 
           if(mounted) {
@@ -536,7 +601,6 @@ class _DashboardListenerWrapperState extends State<DashboardListenerWrapper> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Decline")),
           ElevatedButton(onPressed: () async {
-            // I am the target, I accept, and I update MY node because that's where the request is parked.
             String mySafeIC = _myIC!.replaceAll('-', '');
             await FirebaseDatabase.instance.ref("pewaris_requests/$mySafeIC").update({'status': 'accepted'});
             Navigator.pop(ctx);
@@ -578,7 +642,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       name = prefs.getString('userName') ?? "Ali Bin Ahmad";
       ic = prefs.getString('userIC') ?? "880505-10-5555";
-      // Initialize global notifier
       pewarisStatusNotifier.value = prefs.getString('userPewaris') ?? "Not Set";
     });
   }
@@ -608,7 +671,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Row(children: [const CircleAvatar(child: Icon(Icons.person)), const SizedBox(width: 15), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), Text(ic, style: const TextStyle(color: Color(0xFF06B6D4)))])]),
                       const Divider(color: Colors.white24, height: 30),
-                      // WATCH THE GLOBAL NOTIFIER
                       ValueListenableBuilder<String>(
                           valueListenable: pewarisStatusNotifier,
                           builder: (context, status, _) {
@@ -904,8 +966,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     ),
   );
 }
+
 // ==========================================
-// 8. SETTINGS SCREEN (Fixes Pending Status)
+// 8. SETTINGS SCREEN
 // ==========================================
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -915,6 +978,10 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _icController = TextEditingController();
+  String _selectedRelation = "Wife"; // Default value
+
+  // List of options for the dropdown
+  final List<String> _relations = ["Wife", "Husband", "Father", "Mother", "Child", "Sibling"];
 
   void _sendRequest() async {
     if (_icController.text.length < 6) return;
@@ -923,23 +990,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String target = _icController.text.replaceAll('-', '');
     String myIC = prefs.getString('userIC') ?? "Unknown";
 
-    // 1. Send Request to Firebase with MY IC included
+    // 1. Send Request to Firebase with the SELECTED relationship
     await FirebaseDatabase.instance.ref("pewaris_requests/$target").set({
       "requesterName": "Ali Bin Ahmad",
       "requesterIC": myIC,
-      "relation": "Wife",
+      "relation": _selectedRelation,
       "status": "pending"
     });
 
-    // 2. Save TARGET ID locally so we can listen for THEIR reply
-    await prefs.setString('userPewaris', "Pending Approval...");
+    // 2. Save TARGET ID and RELATION locally
+    await prefs.setString('userPewaris', "Pending ($_selectedRelation)...");
     await prefs.setString('pending_pewaris_ic', target);
+    await prefs.setString('pending_pewaris_relation', _selectedRelation);
 
     // 3. Update Global Notifier
-    pewarisStatusNotifier.value = "Pending Approval...";
+    pewarisStatusNotifier.value = "Pending ($_selectedRelation)...";
 
     if(mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Request Sent!")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Invite sent to $_selectedRelation!")));
+      Navigator.pop(context); // Auto-close settings to show dashboard
     }
   }
 
@@ -956,14 +1025,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
           Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text("Add Pewaris", style: TextStyle(fontWeight: FontWeight.bold)),
-              TextField(controller: _icController, decoration: const InputDecoration(labelText: "Pewaris IC Number")),
-              ElevatedButton(onPressed: _sendRequest, child: const Text("Send Invite"))
-            ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Add Pewaris (Guardian)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 15),
+
+                // --- DROPDOWN MENU ---
+                DropdownButtonFormField<String>(
+                  value: _selectedRelation,
+                  decoration: const InputDecoration(labelText: "Relationship", border: OutlineInputBorder()),
+                  items: _relations.map((String val) {
+                    return DropdownMenuItem(value: val, child: Text(val));
+                  }).toList(),
+                  onChanged: (val) => setState(() => _selectedRelation = val!),
+                ),
+                // -------------------------
+
+                const SizedBox(height: 15),
+                TextField(
+                  controller: _icController,
+                  decoration: const InputDecoration(labelText: "Pewaris IC Number", border: OutlineInputBorder()),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _sendRequest,
+                    icon: const Icon(Icons.send),
+                    label: const Text("Send Invite"),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF06B6D4), foregroundColor: Colors.white),
+                  ),
+                )
+              ],
             ),
           ),
-          ListTile(title: const Text("Log Out", style: TextStyle(color: Colors.red)), onTap: () => Navigator.of(context).popUntil((route) => route.isFirst))
+          const Divider(),
+          ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text("Log Out", style: TextStyle(color: Colors.red)),
+              onTap: () => Navigator.of(context).popUntil((route) => route.isFirst)
+          )
         ],
       ),
     );
